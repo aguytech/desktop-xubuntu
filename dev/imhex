@@ -1,0 +1,50 @@
+#!/bin/bash
+
+########################  REQUIRED
+
+_echot "------- required files"
+file_xtra_bin=${_PATH_BASE}/xtra/imhex/imhex
+file_xtra_desktop=${_PATH_BASE}/xtra/imhex/imhex.desktop
+file_xtra_img=${_PATH_BASE}/xtra/imhex/imhex.svg
+_require ${file_xtra_bin} ${file_xtra_desktop} ${file_xtra_img}
+
+########################  MAIN
+
+if which imhex >/dev/null; then
+	_echoa "imhex has already installed"
+	return
+fi
+
+_echot "------- get"
+anstmp=1.38.0-arm64
+_echoa "url to see available releases: https://github.com/WerWolv/ImHex/tags"
+_askno "Give the version to download imhex from github (${anstmp})"
+imhex_version=${_ANSWER:-${anstmp}}
+file=imhex-${imhex_version}.AppImage
+pth_file=/tmp/${file}
+if ! [ -f ${pth_file} ]; then
+	url=https://github.com/WerWolv/ImHex/releases/download/v${imhex_version%%-*}/${file}
+	_eval wget -qO ${pth_file} ${url} || _exite "Error while downloading url: ${url}"
+fi
+
+_echot "------- install"
+pth_opt=/opt/appimages
+[ -d ${pth_opt} ] || _evalr mkdir -p ${pth_opt}
+_evalr cp ${pth_file} ${pth_opt}/imhex.appimage
+_evalr chmod +x ${pth_opt}/imhex.appimage
+
+file=/usr/local/bin/imhex
+_echot "------- ${file}"
+_keepmvts ${file}
+_evalr cp ${file_xtra_bin} ${file}
+_evalr chmod +x ${file}
+
+file=/usr/share/applications/imhex.desktop
+_echot "------- ${file}"
+_keepmvts ${file}
+_evalr cp ${file_xtra_desktop} ${file}
+
+_echot "------- icons"
+_evalr cp ${file_xtra_img} /usr/share/pixmaps
+_evalr gtk4-update-icon-cache
+_evalr update-icon-caches /usr/share/pixmaps/*

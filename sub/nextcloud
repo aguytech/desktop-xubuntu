@@ -1,0 +1,6 @@
+#!/bin/bash
+
+_echot "------- install"
+packages="nextcloud-desktop nextcloud-desktop-cmd nautilus-nextcloud"
+# csync-owncloud
+_install_pcks ${packages}

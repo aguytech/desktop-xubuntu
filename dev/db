@@ -1,0 +1,8 @@
+#!/bin/bash
+
+########################  MAIN
+
+_echot "------- install"
+packages=" mariadb-client postgresql-client"
+# pgadmin4 mytop
+_install_pcks ${packages}

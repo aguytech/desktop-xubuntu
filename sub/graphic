@@ -1,0 +1,8 @@
+#!/bin/bash
+
+_echot "------- install"
+packages="inkscape ink-generator scribus"
+packages+=" darktable krita"
+# darkroom shotwell
+# ijsgutenprint gimp-gap gimp-save-for-web gimp-normal-map gimp-plugin-registry gimp-dbg gimp-ufraw sozi pandora xsane
+_install_pcks ${packages}

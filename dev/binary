@@ -1,0 +1,9 @@
+#!/bin/bash
+
+########################  MAIN
+
+_echot "------- install"
+packages="ghex wxhexeditor"
+# for bless SEE https://miloserdov.org/?p=5666
+# sysstat mkisofs bless
+_install_pcks ${packages}

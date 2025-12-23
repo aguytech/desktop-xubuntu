@@ -1,0 +1,10 @@
+#!/bin/bash
+
+_echot "------- apt repository"
+sudo add-apt-repository -yn ppa:wireshark-dev/stable
+_evalr apt update
+
+_echot "------- install"
+_echo "Launch this following command in an other terminal:"
+_echoA "sudo apt install -y tshark wireshark"
+_askno "After it, Validate to continue"

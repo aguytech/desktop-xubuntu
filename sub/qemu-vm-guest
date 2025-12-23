@@ -1,0 +1,48 @@
+#!/bin/bash
+
+########################  CHECK
+
+_echoa "This part is to share path and configure qemu/vm in GUEST"
+_echoe "Do not use this part in HOST"
+_askyn "Types 'y' to continue or anything else to exit"
+[ "${_ANSWER}" != "y" ] && _exit
+
+########################  DATA
+
+if [ -z ${_QEMU_SHARE+x} ]; then
+	anstmp=/hostshare
+	_askno "Name of qemu share (${anstmp})"
+	_QEMU_SHARE=${_ANSWER:-${anstmp}}
+	_confset _QEMU_SHARE "${_QEMU_SHARE}"
+fi
+
+if [ -z ${_GUEST_SHARE+x} ]; then
+	anstmp=/host/share
+	_askno "Name of guest share (${anstmp})"
+	_GUEST_SHARE=${_ANSWER:-${anstmp}}
+	_confset _GUEST_SHARE "${_GUEST_SHARE}"
+fi
+
+########################  MAIN
+
+if ! [ -d "${_GUEST_SHARE}" ]; then
+	_echot "------- create ${_GUEST_SHARE}"
+	_evalr mkdir -p ${_GUEST_SHARE}
+	_evalr chown 0:${USER} ${_GUEST_SHARE}
+	_evalr chmod 775 ${_GUEST_SHARE}
+fi
+
+_echot "------- fstab"
+grep -q "^${_QEMU_SHARE}" /etc/fstab || sudo sh -c "echo '
+# qemu share
+${_QEMU_SHARE}					${_GUEST_SHARE}	virtiofs	defaults,nofail									0 0' >> /etc/fstab"
+
+_echot "------- systemctl daemon-reload"
+_evalr systemctl daemon-reload
+
+_echot "------- mount ${_GUEST_SHARE}"
+_evalr mount ${_GUEST_SHARE}
+
+_echot "------- bookmarks"
+file=${HOME}/.config/gtk-3.0/bookmarks
+grep -sq "file://${_GUEST_SHARE}" ${file} || echo "file://${_GUEST_SHARE}" >> ${file}

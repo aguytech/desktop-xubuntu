@@ -1,0 +1,22 @@
+#!/bin/bash
+
+_echot "------- install"
+packages="tlp tlp-rdw acpi acpid"
+_install_pcks ${packages}
+
+_echot "------- tlp enable"
+_service enable tlp
+
+_echot "------- acpid enable"
+service=acpid
+_service enable ${service}
+_service start ${service}
+
+_echot "------- show battery percentage"
+_eval "gsettings set org.gnome.desktop.interface show-battery-percentage true"
+
+#str=" acpi_backlight=vendor" # just try
+#str+=" fbcon=nodefer" # just try
+#if [ "${str}" ] && ! grep -q '^GRUB_CMDLINE_LINUX=.*${str}' ${file}; then
+#	 sudo sed -i "/^GRUB_CMDLINE_LINUX=/ s|\"$|${str}\"|" ${file}
+#fi

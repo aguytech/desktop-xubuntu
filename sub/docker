@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#########################  MAIN
+
+_echot "------- install"
+packages="docker"
+_install_pcks ${packages}
+
+########################  CONF
+
+_echot "------- add user"
+_evalr usermod -aG docker ${USER}
+
+_echot "------- enable"
+_service enable docker
+
+_echot "------- start"
+_service start docker

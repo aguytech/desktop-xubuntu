@@ -1,0 +1,180 @@
+#!/bin/bash
+
+########################  CHECK
+
+_echoa "This part is to install and configure qemu/vm in HOST"
+_echoe "Do not use this part in GUEST"
+_askyn "Types 'y' to continue or anything else to exit"
+[ "${_ANSWER}" != "y" ] && _exit
+
+########################  REQUIRE
+
+_echot "------- required files"
+file_script_nbd=${_PATH_BASE}/bs/scripts/nbd.sh
+file_conf_ca=${_PATH_BASE}/conf/soft/ca.xml
+
+_require ${file_script_nbd} ${file_conf_ca}
+
+########################  CHECK
+
+_echot "------- cpu-checker"
+packages="cpu-checker"
+_install_pcks ${packages}
+
+[ "$( kvm-ok 2>/dev/null )" ] || _exite "Please enable Virtualization capability in your BIOS"
+
+########################  DATA
+
+if [ -z "${_PATH_VIRT}" ]; then
+	anstmp=/vms/virt
+	_askno "Give the path for virt (${anstmp})"
+	_PATH_VIRT=${_ANSWER:-${anstmp}}
+	_confset _PATH_VIRT "${_PATH_VIRT}"
+fi
+
+if [ -z "${_PATH_ISO}" ]; then
+	anstmp=/vms/iso
+	_askno "Give the shared path from the Host (${anstmp})"
+	_PATH_ISO=${_ANSWER:-${anstmp}}
+	_confset _PATH_ISO "${_PATH_ISO}"
+fi
+
+if [ -z "${_PATH_NBD}" ]; then
+	anstmp=/vms/nbd
+	_askno "Give the path to mount device files (${anstmp})"
+	_PATH_NBD=${_ANSWER:-$anstmp}
+	_confset _PATH_NBD "${_PATH_NBD}"
+fi
+
+if [ -z ${_QEMU_SHARE+x} ]; then
+	anstmp=/hostshare
+	_askno "Give the name of QEMU shared path (${anstmp})"
+	_QEMU_SHARE=${_ANSWER:-${anstmp}}
+	_confset _QEMU_SHARE "${_QEMU_SHARE}"
+fi
+
+if [ -z "${_PATH_SHARE}" ]; then
+	anstmp=/vms/share
+	_askno "Give the shared path from the Host (${anstmp})"
+	_PATH_SHARE=${_ANSWER:-${anstmp}}
+	_confset _PATH_SHARE "${_PATH_SHARE}"
+fi
+
+if [ -z ${_GUEST_SHARE+x} ]; then
+	anstmp=/host/share
+	_askno "Give the name of shared path from guest (${anstmp})"
+	_GUEST_SHARE=${_ANSWER:-${anstmp}}
+	_confset _GUEST_SHARE "${_GUEST_SHARE}"
+fi
+
+########################  MAIN
+
+_echot "------- install"
+packages="qemu-system-x86 qemu-utils bridge-utils dnsmasq virtiofsd"
+packages+=" libvirt-daemon-system libvirt-clients virt-manager virt-viewer virtinst"
+packages+=" guestfs-tools libguestfs-tools ovmf"
+
+_install_pcks ${packages}
+
+_echot "------- tpm support"
+# for windows 11 guest
+packages="swtpm"
+_install_pcks ${packages}
+
+########################  CONF
+
+_echot "------- ${USER} in libvirt,libvirt-qemu,kvm"
+_evalr usermod -aG libvirt,libvirt-qemu,kvm ${USER}
+
+_echot "------- connect uri"
+file=/etc/libvirt/libvirt.conf
+sed -i '/^#uri_default/ s|^#||' ${file}
+#sed -i 's|^#uri_default.*$|uri_default = "qemu:///system"|' ${file}
+
+########################  VIRT
+
+_echot "------- ${_PATH_VIRT}"
+pth=${_PATH_VIRT}/${_VER_NAME:0:3}
+[ -d "${pth}" ] || _evalr mkdir -p ${pth}
+_evalr chown libvirt-qemu:libvirt-qemu ${pth}
+_evalr setfacl -Rm o::rx,g::rwx,o::rx ${_PATH_ISO}
+_evalr setfacl -d -Rm o::rx,g::rwx,o::rx ${_PATH_ISO}
+
+########################  ISO
+
+_echot "------- ${_PATH_ISO}"
+[ -d "${_PATH_ISO}" ] || _evalr mkdir -p "${_PATH_ISO}"
+_evalr chown ${USER}:${USER} ${_PATH_ISO}
+# to give group write modifications for mkisofs and virt-manager
+_evalr setfacl -Rm o::rx,g::rwx,o::rx ${_PATH_ISO}
+_evalr setfacl -d -Rm o::rx,g::rwx,o::rx ${_PATH_ISO}
+
+########################  SHARE
+
+_echot "------- ${_PATH_SHARE}"
+[ -d "${_PATH_SHARE}" ] || _evalr mkdir -p "${_PATH_SHARE}"
+_evalr chown ${USER}:${USER} ${_PATH_SHARE}
+_echot "------- ACL permissions"
+_evalr setfacl -Rm u:libvirt-qemu:rwx ${_PATH_SHARE}
+_evalr setfacl -d -Rm u:libvirt-qemu:rwx ${_PATH_SHARE}
+_evalr setfacl -Rm g:libvirt-qemu:rwx ${_PATH_SHARE}
+_evalr setfacl -d -Rm g:libvirt-qemu:rwx ${_PATH_SHARE}
+
+_echoA "To enbale sharing folder, in your Host domain, you have to:"
+_echoA "1 - enable 'shared memory' in the host domain"
+_echoA "2 - configure your filesystem with this parameters: "
+_echo "		Source path: ${_PATH_SHARE}"
+_echo "		Target path: /hostshare"
+_askno "Validate to continue"
+
+_echot "------- bookmarks"
+file=${HOME}/.config/gtk-3.0/bookmarks
+[ -f ${file} ] || echo "file:///vms" > ${file}
+grep -q "file:///vms" ${file} || echo "file:///vms" >> ${file}
+
+########################  NBD
+
+_echot "------- ${_PATH_NBD}"
+[ -d "${_PATH_NBD}" ] || _evalr mkdir -p ${_PATH_NBD}
+_evalr chown ${USER}:${USER} ${_PATH_NBD}
+
+_echot "------- install"
+packages="qemu-utils"
+_install_pcks ${packages}
+
+_echot "------- script"
+file=/usr/local/bin/nbd
+_evalr cp ${file_script_nbd} ${file}
+_evalr chmod +x ${file}
+sudo sed -i "/^_PATH_NBD=/ s|=.*$|=\"${_PATH_NBD}\"|" ${file}
+
+_echot "------- bookmarks"
+file=${HOME}/.config/gtk-3.0/bookmarks
+grep -q "file://${_PATH_NBD}" ${file} || echo "file://${_PATH_NBD}" >> ${file}
+
+_echot "------- thunar CA"
+file=~/.config/Thunar/uca.xml
+[ -d ~/.config/Thunar ] || mkdir -p ~/.config/Thunar
+if [ -f "${file}" ]; then
+	_keepcpts ${file}
+else
+	echo -e '<?xml version="1.0" encoding="UTF-8"?>\n<actions>\n</actions>' > ${file}
+fi
+# not already made
+if ! grep -q 1655620394868230-1 ${file}; then
+	sed -i '$,1d' ${file}
+	cat ${file} ${file_conf_ca} > ${file}.tmp
+	_eval mv ${file}.tmp ${file}
+fi
+
+########################  END
+
+_partadd "${_SPATH}_${_PART}" "${S_FILE_INSTALL_DONE}"
+
+########################  REBOOT
+
+_echot "------- soft-reboot"
+_echoA "Be careful, close others softwares the system will soft-reboot"
+_echoA "This session will be closed"
+_askno "Validate to continue"
+_evalr systemctl soft-reboot 

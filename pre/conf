@@ -1,0 +1,146 @@
+#!/bin/bash
+
+########################  REQUIRED
+
+file_meld_conf=${_PATH_BASE}/conf/soft/meld-perso-dark.style-scheme.xml
+file_aegisub_conf=${_PATH_BASE}/conf/soft/aegisub-config.json
+file_tmux_desktop=${_PATH_BASE}/xtra/xfce4-terminal-tmux.desktop
+_require ${file_meld_conf} ${file_aegisub_conf} ${file_tmux_desktop}
+
+pth_icons=${_PATH_BASE}/icons
+pth_gtk=${_PATH_BASE}/conf/gtk
+pth_vim=${_PATH_BASE}/conf/vim
+pth_wp=${_PATH_BASE}/xtra/wp
+_requirep ${pth_icons} ${pth_gtk} ${pth_vim} ${pth_wp}
+
+########################  SYSTEM
+
+_echot "------- profile desktop.sh"
+export PATH="${PATH}:${_PATH_BS}"
+export QT_QPA_PLATFORMTHEME=qt6ct
+file=/etc/profile.d/desktop.sh
+sudo sh -c "echo '# PATH
+export PATH=\${PATH}:${_PATH_BS}
+# QT6
+export QT_QPA_PLATFORMTHEME=qt6ct' > ${file}"
+
+_echot "------- vim links edit"
+for file in /usr/bin/edit /usr/bin/editor; do
+	[ -e ${file} ] && _evalr rm ${file}
+	_evalr ln -sv /usr/bin/vim ${file}
+done
+
+_echot "------- vim colors"
+_evalr cp ${pth_vim}/* /usr/share/vim/vim*/colors/
+
+_echot "------- vim conf"
+file=/etc/vim/vimrc
+sudo sed -i "s|^\"\(syntax\).*|\1 on|" ${file}
+opts="background=dark showmatch"
+# uncomment
+for opt in ${opts}; do
+	sudo sed -i "s|^\"\(set ${opt}.*\)$|\1|" ${file}
+done
+
+_echot "------- nano"
+for str in conf install; do
+	_evalr cp -a /usr/share/nano/sh.nanorc /usr/share/nano/${str}.nanorc
+	sudo sed -i 's|^\(syntax \).*|\1"'${str}'" "\.'${str}'$"|' /usr/share/nano/${str}.nanorc
+done
+file=/etc/nanorc
+_keepcpts ${file}
+sudo sed -i 's|^.*\(set tabsize\).*|\1 4|' ${file}
+sudo sed -i 's|^\(set cut.*\)$|# \1|' ${file}
+sudo sed -i 's|^\(set linenumbers.*\)$|# \1|' ${file}
+sudo sed -i '/^# *include/ s/^# //' ${file}
+# uncomment options
+opts="constantshow historylog matchbrackets multibuffer nohelp softwrap"
+opts+=" errorcolor functioncolor keycolor numbercolor selectedcolor statuscolor stripecolor titlecolor"
+for opt in ${opts}; do
+	sudo sed -i "s|^.*\(set ${opt} .*\)$|\1|" ${file}
+done
+
+_echot "------- meld style"
+pth=/usr/share/meld/styles
+_keepmvts ${file}
+_evalr cp ${file_meld_conf} ${pth}
+
+_echot "------- wp"
+pth=/usr/share/backgrounds
+_evalr cp ${pth_wp}/* ${pth}/
+_evalr chmod 644 ${pth}/*
+
+########################  USER
+
+_echot "------- user icons"
+pth=${HOME}/.local/share/icons
+_eval cp ${pth_icons}/* ${pth}/
+
+_echot "------- tmux resurrect"
+pth=${HOME}/.tmux/plugins/tmux-resurrect
+_keepmvts ${pth}
+_eval git clone https://github.com/tmux-plugins/tmux-resurrect ${pth}
+grep -sq resurrect.tmux ${file} || echo "# resurrect plugin
+run-shell ${pth}/resurrect.tmux" >> ${HOME}/.tmux.conf
+
+_echot "------- tmux continuum"
+pth=${HOME}/.tmux/plugins/tmux-continuum
+_keepmvts ${pth}
+_eval git clone https://github.com/tmux-plugins/tmux-continuum ${pth}
+grep -sq continuum.tmux ${file} || echo "# resurrect continuum
+run-shell ${pth}/continuum.tmux" >> ${HOME}/.tmux.conf
+
+_echot "------- tmux themepack"
+_install_pcks fonts-powerline
+pth=${HOME}/.tmux/themes/tmux-themepack
+_keepmvts ${pth}
+_eval git clone https://github.com/jimeh/tmux-themepack.git ${pth}
+grep -sq tmux-themepack ${file} || echo "# source themepack
+source-file ${pth}/powerline/double/cyan.tmuxtheme" >> ${HOME}/.tmux.conf
+
+_echot "------- configuration files"
+for file in .nanorc .tmux.conf .vimrc; do
+	pth=${HOME}/${file}
+	_keepmvts "${pth}"
+	_eval cp -a "${_PATH_BS}/conf/${file}" "${pth}"
+	_evalr chmod 644 ${pth}
+done
+
+_echot "------- tmux source"
+_eval tmux new -d
+_eval tmux source-file ${HOME}/.tmux.conf
+
+_echot "------- tmux desktop"
+_eval cp -a ${file_tmux_desktop} ${HOME}/.local/share/applications/
+_evalr chmod 644 ${HOME}/.local/share/applications/${file_tmux_desktop##*/}
+
+_echot "------- tmux .bash_profile"
+file=~/.bash_profile
+[ -f ${file} ] || echo '[ -f ~/.bashrc ] && source ~/.bashrc' >> ${file}
+
+_echot "------- gtk4"
+pth_to="${HOME}/.local/share/gtksourceview-4"
+[ -d "${pth_to}" ] && _keepmvts "${pth_to}"
+_eval cp -a ${pth_gtk} ${pth_to}
+
+_echot "------- gtk3"
+cd "${HOME}/.local/share"
+[ -e "gtksourceview-4" ] || _eval ln -s gtksourceview-4 gtksourceview-3.0
+
+_echot "------- aegisub"
+pth=${HOME}/.aegisub/
+[ -d "${pth}" ] || _eval mkdir -p ${pth}
+_eval cp -a ${file_aegisub_conf} ${pth}
+_evalr chmod 644 ${pth}/${file_aegisub_conf##*/}
+
+########################  EXTERNAL
+
+_echot "------- QT5"
+_echoA "After validation, adjust settings for qt5 and close qt5ct window"
+_askno "Validate to continue"
+qt5ct 2>/dev/null
+
+_echot "------- QT6"
+_echoA "After validation, adjust settings for qt6 and close qt6ct window"
+_askno "Validate to continue"
+qt6ct 2>/dev/null

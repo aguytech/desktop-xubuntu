@@ -1,0 +1,14 @@
+#!/bin/bash
+
+_echot "------- upgrade"
+_eval ${_PATH_BASE}/bs/upgrade
+
+########################  END
+
+_partadd "${_SPATH}_${_PART}" "${S_FILE_INSTALL_DONE}"
+
+########################  RESTART
+
+_echoA "Restart your computer to append configuration"
+_askno "Validate to reboot"
+_evalr reboot

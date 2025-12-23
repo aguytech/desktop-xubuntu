@@ -1,0 +1,60 @@
+#!/bin/bash
+
+########################  REQUIRED
+
+_echot "------- required files"
+file_lepton_bin=${_PATH_BASE}/xtra/lepton/lepton-snippet-manager
+file_lepton_desktop=${_PATH_BASE}/xtra/lepton/lepton-snippet-manager.desktop
+file_lepton_png=${_PATH_BASE}/xtra/lepton/lepton-snippet-manager-png.tgz
+file_lepton_conf=${_PATH_BASE}/conf/soft/.leptonrc
+_require ${file_lepton_bin} ${file_lepton_desktop} ${file_lepton_png} ${file_lepton_conf}
+
+########################  MAIN
+
+if which lepton-snippet-manager >/dev/null; then
+	_echoa "lepton-snippet-manager has already installed"
+	return
+fi
+
+_echot "------- libfuse2t64"
+packages="libfuse2t64"
+_install_pcks ${packages}
+
+_echot "------- get"
+anstmp=1.10.0
+_echoa "url to see available releases: https://github.com/hackjutsu/Lepton/releases"
+_askno "Give the version to download lepton from github (${anstmp})"
+version=${_ANSWER:-${anstmp}}
+file=Lepton-${version}.AppImage
+pth_file=/tmp/${file}
+if ! [ -f ${pth_file} ]; then
+	url=https://github.com/hackjutsu/Lepton/releases/download/v${version%%-*}/${file}
+	_eval wget -qO ${pth_file} ${url} || _exite "Error while downloading url: ${url}"
+fi
+
+_echot "------- install"
+pth_opt=/opt/appimages
+[ -d ${pth_opt} ] || _evalr mkdir -p ${pth_opt}
+_evalr cp ${pth_file} ${pth_opt}/lepton-snippet-manager.appimage
+_evalr chmod +x ${pth_opt}/lepton-snippet-manager.appimage
+
+file=/usr/local/bin/lepton-snippet-manager
+_echot "------- ${file}"
+_keepmvts ${file}
+_evalr cp ${file_lepton_bin} ${file}
+_evalr chmod +x ${file}
+
+file=/usr/share/applications/lepton-snippet-manager.desktop
+_echot "------- ${file}"
+_keepmvts ${file}
+_evalr cp ${file_lepton_desktop} ${file}
+
+_echot "------- icons"
+_evalr tar xzf ${file_lepton_png} -C /usr/share/icons/hicolor
+_evalr gtk4-update-icon-cache
+_evalr update-icon-caches /usr/share/icons/*
+
+file=~/.leptonrc
+_echot "------- ${file}"
+_keepmvts ${file}
+_eval cp -a ${file_lepton_conf} ${file}

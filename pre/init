@@ -1,0 +1,143 @@
+#!/bin/bash
+
+########################  REQUIRED
+
+_echot "------- required paths"
+pth_install_bash_completion=${_PATH_BASE}/xtra/bash-completion
+_requirep ${pth_install_bash_completion}
+
+_echot "------- required files"
+file_env=${_PATH_BASE}/bs/conf/.sh_env
+file_sh_aliases=${_PATH_BASE}/bs/conf/.sh_aliases
+file_sh_functions=${_PATH_BASE}/bs/conf/.sh_functions
+_require ${file_env} ${file_sh_aliases} ${file_sh_functions}
+
+########################  SYSTEM
+
+_echot "------- global vatiables"
+export S_PATH_SCRIPT=/usr/local/bs
+export S_GLOBAL_CONF=/usr/local/conf/global.conf
+export S_GLOBAL_FUNCTIONS="/usr/local/bs/inc-functions"
+
+_echot "------- root user"
+_askno "Give the password for root or leave blank to let unset"
+[ "${_ANSWER}" ] && echo -e "${_ANSWER}\n${_ANSWER}" | sudo passwd root
+
+_echot "------- grub"
+file=/etc/default/grub
+_keepcpts ${file}
+sudo sed -i "s|^.\?\(GRUB_TIMEOUT_STYLE\)=.*|\1=menu|" ${file}
+sudo sed -i "/^GRUB_TIMEOUT=/ s|=.*|=2|" ${file}
+sudo sed -i "/^GRUB_DEFAULT=/ s|=.*|=0|" ${file}
+sudo sed -i "/^GRUB_DISABLE_OS_PROBER=T=/ s|=.*|=false|" ${file} # manjaro
+grep -q '^GRUB_DISABLE_OS_PROBER' ${file} || sudo sh -c "echo 'GRUB_DISABLE_OS_PROBER=false' >> ${file}"
+
+file=/etc/grub.d/00_header
+_evalr cp -a ${file} ${file}.${_SDATE} && _evalr chmod -x ${file}.${_SDATE}
+sudo sed -i "s|30|2|g" ${file}
+
+if [ "${_BTRFS}" ];then
+	_echot "------- grub install"
+	_evalr grub-install ${_DEVICE_GRUB}
+fi
+
+_echot "------- grub update"
+_evalr update-grub
+
+_echot "------- reduce swapiness"
+_evalr swapoff -av
+sudo sh -c 'echo vm.swappiness=40 > /etc/sysctl.d/99-swappiness.conf' # limit swap
+_evalr swapon -v
+
+_echot "------- remove"
+packages="firefox-esr-l10n-ar firefox-esr-l10n-ast firefox-esr-l10n-be firefox-esr-l10n-bg firefox-esr-l10n-bn firefox-esr-l10n-bs firefox-esr-l10n-ca firefox-esr-l10n-cs firefox-esr-l10n-cy firefox-esr-l10n-da firefox-esr-l10n-de firefox-esr-l10n-el firefox-esr-l10n-en-gb firefox-esr-l10n-eo firefox-esr-l10n-es-ar firefox-esr-l10n-es-cl firefox-esr-l10n-es-es firefox-esr-l10n-es-mx firefox-esr-l10n-et firefox-esr-l10n-eu firefox-esr-l10n-fa firefox-esr-l10n-fi firefox-esr-l10n-ga-ie firefox-esr-l10n-gl firefox-esr-l10n-gu-in firefox-esr-l10n-he firefox-esr-l10n-hi-in firefox-esr-l10n-hr firefox-esr-l10n-hu firefox-esr-l10n-id firefox-esr-l10n-is firefox-esr-l10n-it firefox-esr-l10n-ja firefox-esr-l10n-kk firefox-esr-l10n-km firefox-esr-l10n-kn firefox-esr-l10n-ko firefox-esr-l10n-lt firefox-esr-l10n-lv firefox-esr-l10n-mk firefox-esr-l10n-mr firefox-esr-l10n-nb-no firefox-esr-l10n-ne-np firefox-esr-l10n-nl firefox-esr-l10n-nn-no firefox-esr-l10n-pa-in firefox-esr-l10n-pl firefox-esr-l10n-pt-br firefox-esr-l10n-pt-pt firefox-esr-l10n-ro firefox-esr-l10n-ru firefox-esr-l10n-si firefox-esr-l10n-sk firefox-esr-l10n-sl firefox-esr-l10n-sq firefox-esr-l10n-sr firefox-esr-l10n-sv-se firefox-esr-l10n-ta firefox-esr-l10n-te firefox-esr-l10n-th firefox-esr-l10n-tr firefox-esr-l10n-uk firefox-esr-l10n-vi firefox-esr-l10n-zh-cn firefox-esr-l10n-zh-tw "
+_evalr apt remove -y ${packages}
+
+_echot "------- non-free"
+_evalr sed -i "s|main |main non-free |" /etc/apt/sources.list
+
+_echot "------- apt stable-proposed-updates"
+sudo sh -c "echo '# stable-proposed-updates
+deb http://deb.debian.org/debian/ trixie-proposed-updates main non-free' > /etc/apt/sources.list"
+
+########################  USER
+
+_echot "------- user paths"
+pths="${HOME}/.local/bin ${HOME}/.local/share/icons ${HOME}/.local/share/applications"
+for pth in ${pths}; do
+	[ -d "${pth}" ] || mkdir -p ${pth}
+done
+
+_echot "------- global conf"
+file=${S_GLOBAL_CONF}
+[ -f "${file}" ] || touch ${file}
+
+_echot "------- .sh_env"
+file=${HOME}/.sh_env
+_keepmvts ${file}
+_eval cp -a ${file_env} ${file}
+_evalr chmod 644 ${file}
+
+_echot "------- .sh_aliases"
+file=~/.sh_aliases
+_keepmvts ${file}
+_eval cp -a ${file_sh_aliases} ${file}
+_evalr chmod 644 ${file}
+
+_echot "------- .sh_functions"
+file=~/.sh_functions
+_keepmvts ${file}
+_eval cp -a ${file_sh_functions} ${file}
+_evalr chmod 644 ${file}
+
+file=~/.bashrc
+if ! [ -f ${file} ]; then
+	_echot "------- init .bashrc"
+	[ -f /etc/skel/.bashrc ] || _exite "Unable to find file: '/etc/skel/.bashrc'"
+	_evalr cp -a /etc/skel/.bashrc ${HOME}/
+	_evalr chown ${USER}:${USER} ${file}
+	_evalr chmod 644 ${file}
+fi
+
+# force color
+sudo sed -i '/^#force_color_prompt=/ s|#||' ~/.bashrc
+
+_echot "------- common .*hrc"
+for file in ~/.bashrc ~/.zshrc; do
+	_keepcpts ${file}
+	grep -sq '####  PERSO' ${file} || echo "
+########################  PERSO
+
+# HISTORY
+HISTSIZE=50000
+HISTFILESIZE=50000
+
+# source global variables
+[ -f ~/.sh_env ] && . ~/.sh_env
+
+# aliases
+[ -f ~/.sh_aliases ] && . ~/.sh_aliases
+
+# functions
+[ -f ~/.sh_functions ] && . ~/.sh_functions
+" >> ${file}
+	_evalr chmod 644 ${file}
+done
+
+_echot "------- .bashrc"
+color='\[\033[01;34m\]'
+color_root='\[\033[01;31m\]'
+file=~/.bashrc
+	grep -q '# PS1$' ${file} || echo "
+PATH=${PATH}:/usr/sbin
+
+# PS1
+if [[ \${EUID} == 0 ]]; then
+	PS1='${color_root}\\u@\\h \\[\\033[1;37m\\]\\w${color_root}\\$\\[\\033[00m\\] '
+else
+	PS1='${color}\\u@\\h\\[\\033[01;37m\\] \\[\\033[1;37m\\]\\w${color}\\$\\[\\033[00m\\] '
+fi
+" >> ${file}
+
+_echot "------- bash-completion"
+_evalr "cp -a ${pth_install_bash_completion}/* /usr/share/bash-completion/completions/"

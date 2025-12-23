@@ -1,0 +1,8 @@
+#!/bin/bash
+
+########################  PRE OUTSIDE
+
+_echot "------- libdvd"
+_echo "Launch this following command in an other terminal:"
+_echoA "sudo apt install -y libdvdnav4 libdvd-pkg libdvdread8t64"
+_askno "After it, Validate to continue"

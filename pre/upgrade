@@ -1,0 +1,14 @@
+#!/bin/bash
+
+########################  MAIN
+
+_echot "------- update"
+_evalr apt update
+
+_echot "------- dist-upgrade"
+_evalr apt -y dist-upgrade
+
+_echot "------- clean"
+_evalr apt -y autoremove
+_evalr apt clean
+_evalr apt autoclean

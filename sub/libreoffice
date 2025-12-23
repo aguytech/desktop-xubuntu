@@ -1,0 +1,20 @@
+#!/bin/bash
+
+########################  MAIN
+
+_echot "------- install"
+packages="libreoffice libreoffice-gnome libreoffice-gtk4"
+# libreoffice-qt6
+_install_pcks ${packages}
+
+_echot "------- tools"
+packages=" libreoffice-sdbc-mysql libreoffice-wiki-publisher"
+# libreoffice-sdbc-postgresql
+packages+=" libreoffice-numbertext"
+# libreoffice-dmaths libreoffice-librelogo
+_install_pcks ${packages}
+
+_echot "------- styles"
+packages=" libreoffice-style-breeze libreoffice-style-sifr"
+# libreoffice-style-elementary libreoffice-style-sifr
+_install_pcks ${packages}

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+_echot "------- tools"
+packages="dnsutils net-tools netcat-traditional traceroute whois xinetd"
+packages+=" bmon darkstat dstat hping3 iftop ifstat iptraf-ng tcpdump vnstat"
+# ibmonitor
+_install_pcks ${packages}

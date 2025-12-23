@@ -1,0 +1,398 @@
+#!/bin/bash
+
+########################  DATA
+
+_echot "------- Devices"
+sudo lsblk -e 11,7 -o name,size,fsuse%,type,label,uuid
+echo
+sudo blkid|grep -v /loop
+echo
+
+devices=" $( sudo blkid -o device | grep -v '/loop\|/sr' | xargs) "
+
+if [ -z ${_UEFI+x} ]; then
+	menutmp=$( sudo blkid|grep -i 'TYPE="vfat"'|cut -d':' -f1|sort|xargs )
+	_menu "Select a device for UEFI or none" none ${menutmp}
+	_UEFI=${_ANSWER/none/}
+	_confset _UEFI "${_UEFI}"
+fi
+[ "${_UEFI}" ] && devices=${devices/ ${_UEFI} / }
+
+if [ -z ${_DEVICE_SYS+x} ]; then
+	_menu "Select a device for SYSTEM" ${devices}
+	_DEVICE_SYS=${_ANSWER}
+	_confset _DEVICE_SYS "${_DEVICE_SYS}"
+fi
+if [ "${_DEVICE_SYS}" ]; then
+	${devices/ ${_DEVICE_SYS} / }
+	if [ -z ${_SSD_SYS+x} ]; then
+		_askyn "The SYSTEM device '${_DEVICE_SYS}' are they a SSD disk ?"
+		_SSD_SYS=${_ANSWER/n/}
+		_confset _SSD_SYS "${_SSD_SYS}"
+	fi
+fi
+
+if [ -z ${_DEVICE_EXT+x} ]; then
+	_menu "Select a dedicated device for /ext or none" none ${devices}
+	_DEVICE_EXT=${_ANSWER/none/}
+	_confset _DEVICE_EXT "${_DEVICE_EXT}"
+fi
+if [ "${_DEVICE_EXT}" ]; then
+	${devices/ ${_DEVICE_EXT} / }
+	if [ -z ${_SSD_EXT+x} ]; then
+		_askyn "The SYSTEM device '${_DEVICE_EXT}' are they a SSD disk ?"
+		_SSD_EXT=${_ANSWER/n/}
+		_confset _SSD_EXT "${_SSD_EXT}"
+	fi
+fi
+
+if [ -z ${_DEVICE_VMS+x} ]; then
+	_menu "Select a dedicated device for /vms or none" none ${devices}
+	_DEVICE_VMS=${_ANSWER/none/}
+	_confset _DEVICE_VMS "${_DEVICE_VMS}"
+fi
+if [ "${_DEVICE_VMS}" ]; then
+	${devices/ ${_DEVICE_VMS} / }
+	if [ -z ${_SSD_VMS+x} ]; then
+		_askyn "The SYSTEM device '${_DEVICE_VMS}' are they a SSD disk ?"
+		_SSD_VMS=${_ANSWER/n/}
+		_confset _SSD_VMS "${_SSD_VMS}"
+	fi
+fi
+
+if [ -z ${_DEVICE_GRUB+x} ]; then
+	menutmp=$( lsblk -e 11,7|grep '^[a-z][a-z][a-z]'|cut -d' ' -f1|sed 's|^|/dev/|'|xargs )
+	menutmp+=" $( sudo blkid -o device|grep -v '/loop\|/sr'|xargs )"
+	_menu "Select a device for GRUB installation" ${menutmp}
+	_DEVICE_GRUB=${_ANSWER}
+	_confset _DEVICE_GRUB "${_DEVICE_GRUB}"
+fi
+
+if [ -z ${_SYSNAME+x} ]; then
+	file=/etc/os-release
+	anstmp=$( sed -n 's|^.*_CODENAME=\(.*\)$|\1|p' ${file} | sed 's/"//g' | sed 's/.*/\L&/g' )
+	_askno "Give a NAME for system btrfs volume: ${_DEVICE_SYS} (${anstmp})"
+	_SYSNAME=${_ANSWER:-${anstmp}}
+	_confset _SYSNAME "${_SYSNAME}"
+fi
+
+if [ -z ${_USERNAME+x} ]; then
+	anstmp="nikita"
+	_askno "Give the user name (${anstmp})"
+	_USERNAME=${_ANSWER:-${anstmp}}
+	_confset _USERNAME "${_USERNAME}"
+fi
+
+if [ -z ${_MEM+x} ]; then
+	anstmp=2G
+	_askno "Give the TMPFS memory size for /tmp or 0 (${anstmp})"
+	_MEM=${_ANSWER:-${anstmp}}
+	_MEM=${_MEM%%0*}
+	_confset _MEM "${_MEM}"
+fi
+
+########################  MAIN
+
+_echo "------- --------"
+cat "${S_FILE_INSTALL_CONF}"
+_echo "------- --------"
+_askyn "Confirm installation" && [ "${_ANSWER}" == n ] && _exit 1
+
+########################  SUBVOLUMES
+
+if [ "${_DEVICE_VMS}" ]; then
+
+	###########  MOUNT _DEVICE_VMS /mnt
+
+	pth=/mnt
+	_echot "------- mount ${_DEVICE_VMS} ${pth}"
+	_evalr mount "${_DEVICE_VMS}" ${pth} || _exite "Unable to mount ${_DEVICE_VMS} in ${pth}"
+
+	if ! sudo btrfs subvolume list -o ${pth} | cut -d' ' -f9 | grep -q ^vms; then
+		_echot "------- btrfs create vms"
+		_evalr btrfs subvolume create ${pth}/vms || _exite "Unable to: btrfs subvolume create ${pth}/vms"
+	fi
+
+	_echot "------- umount ${_DEVICE_VMS} ${pth}"
+	_evalr umount ${pth} || _exite "Unable to umount ${pth}"
+
+	###########  UMOUNT _DEVICE_VMS /mnt
+
+	_echot "------- mount ${_DEVICE_SYS} in ${pth_sys}"
+
+fi
+
+if grep -q "^${_DEVICE_SYS}" /proc/mounts; then
+	pth_sys=$( grep "^${_DEVICE_SYS}" /proc/mounts | cut -d' ' -f2 )
+	_echot "------- umount ${pth_sys}"
+	_evalr umount ${pth_sys} || _exite "Unable to unmount ${pth_sys}"
+fi
+
+###########  MOUNT _DEVICE_SYS pth_sys
+
+_echot "------- mount ${_DEVICE_SYS} in ${pth_sys}"
+pth_sys=/mnt_sys
+[ -d "${pth_sys}" ] || _evalr mkdir "${pth_sys}"
+_evalr mount "${_DEVICE_SYS}" "${pth_sys}" || _exite "Unable to mount ${_DEVICE_SYS} in ${pth_sys}"
+
+cd ${pth_sys}
+
+_echot "------- btrfs list"
+_evalr btrfs subvolume list -t .
+
+_echot "------- user"
+uid=$( grep ^${_USERNAME} '@/etc/passwd' | cut -d: -f3 )
+[ -z "${uid}" ] && uid=1000
+gid=$( grep ^${_USERNAME} '@/etc/group' | cut -d: -f3 )
+[ -z "${gid}" ] && gid=1000
+
+_echot "------- system"
+[ -d "${_SYSNAME}" ] && _keepmvts ${_SYSNAME}
+_evalr mv '@' ${_SYSNAME} || _exite "Unable to move @ to ${_SYSNAME}"
+
+_echot "------- home"
+[ -d home ] || _evalr btrfs subvolume create home
+# backup & create volume for user-$user
+[ -d "user-${_SYSNAME}" ] && _keepmvts user-${_SYSNAME}
+_evalr btrfs subvolume create user-${_SYSNAME}
+# move data user to user-$user
+_evalr "mv @home/${_USERNAME}/* user-${_SYSNAME}/ 2>/dev/null"
+_evalr "mv @home/${_USERNAME}/.??* user-${_SYSNAME}/ 2>/dev/null"
+# create path for binding user-${user}
+[ -d "home/${_USERNAME}" ] || _evalr mkdir "home/${_USERNAME}"
+_evalr chown ${uid}:${gid} -R home/${_USERNAME} user-${_SYSNAME}
+
+pths_btrfs=
+
+_echot "------- btrfs/*"
+pths_btrfs+=" ${_SYSNAME}/btrfs/sys"
+pths_btrfs+=" ${_SYSNAME}/btrfs/save"
+[ "${_DEVICE_EXT}" ] && pths_btrfs+=" ${_SYSNAME}/btrfs/ext"
+[ "${_DEVICE_VMS}" ] && pths_btrfs+=" ${_SYSNAME}/btrfs/vms"
+
+_echot "------- ext"
+pths_btrfs+=" ${_SYSNAME}/ext"
+if ! [ "${_DEVICE_EXT}" ]; then
+	[ -d ext ] || _evalr btrfs subvolume create ext
+fi
+
+_echot "------- vms"
+pths_btrfs+=" ${_SYSNAME}/vms"
+if ! [ "${_DEVICE_VMS}" ]; then
+	[ -d vms ] || _evalr btrfs subvolume create vms
+fi
+
+_echot "------- save"
+pths_btrfs+=" ${_SYSNAME}/save"
+[ -d save ] || _evalr btrfs subvolume create save
+
+_echot "------- create: ${pths_btrfs}"
+for pth in ${pths_btrfs}; do
+	[ -d "${pth}" ] || _evalr mkdir -p "${pth}"
+done
+
+pths="${_SYSNAME}/save ${_SYSNAME}/ext ${_SYSNAME}/vms"
+_echot "------- rights: ${pths}"
+for pth in ${pths}; do
+	[ -d "${pth}" ] || _evalr mkdir -p "${pth}"
+	_evalr chown ${uid}:${gid} ${pth}
+done
+
+_echot "------- btrfs delete installation paths"
+for sub in @home @cache @log; do
+	[ "$( sudo btrfs subvolume show ${sub} 2>/dev/null )" ] && _evalr btrfs subvolume delete -c ${sub}
+done
+
+_echot "------- path delete"
+pths="create ubiquity-apt-clone var installation paths"
+for pth in ${pths}; do
+	[ -e "${pth}" ] && _evalr rm -fR "${pth}"
+done
+
+_echot "------- btrfs subvolume list ${PWD}"
+_evalr btrfs subvolume list -t .
+
+########################  FSTAB
+
+_echot "------- device sys"
+uuidsys=$( sudo blkid -o export ${_DEVICE_SYS} | grep '^UUID=' | cut -d= -f2 )
+if [ -z "${uuidsys}" ]; then
+	_ask "Please give the UUID for sys"
+	uuidsys=${_ANSWER}
+fi
+
+if [ "${_DEVICE_EXT}" ]; then
+	_echot "------- device ext"
+	uuidext=$( sudo blkid -o export ${_DEVICE_EXT} | grep '^UUID=' | cut -d= -f2 )
+	if [ -z "${uuidext}" ]; then
+		_ask "Please give the UUID for ext"
+		uuidext=${_ANSWER}
+	fi
+fi
+
+if [ "${_DEVICE_VMS}" ]; then
+	_echot "------- device ext"
+	uuidvms=$( sudo blkid -o export ${_DEVICE_VMS} | grep '^UUID=' | cut -d= -f2 )
+	if [ -z "${uuidvms}" ]; then
+		_ask "Please give the UUID for vms"
+		uuidvms=${_ANSWER}
+	fi
+fi
+
+_echot "------- fstab"
+file=${_SYSNAME}/etc/fstab
+_keepcpts ${file}
+sudo sed -i "\|/var/cache |d" ${file}
+sudo sed -i "\|/var/log |d" ${file}
+sudo sed -i '/^UUID=.* btrfs .*/ s|^|#|' ${file}
+
+[ "${_SSD_SYS}" ] && ssd="ssd," || ssd=
+sudo sh -c "echo '
+# sys ${_DEVICE_SYS}
+UUID=${uuidsys}	/		btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/${_SYSNAME}		0 1
+UUID=${uuidsys}	/home		btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/home		0 2
+UUID=${uuidsys}	/home/${_USERNAME}	btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/user-${_SYSNAME}	0 2' >> ${file}"
+# /ext
+[ "${_DEVICE_EXT}" ] || sudo sh -c "echo 'UUID=${uuidsys}	/ext		btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/ext		0 2' >> ${file}"
+# /vms
+[ "${_DEVICE_VMS}" ] || sudo sh -c "echo 'UUID=${uuidsys}	/vms		btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/vms		0 2' >> ${file}"
+# btrfs/sys
+sudo sh -c "echo '# /btrfs/
+UUID=${uuidsys}	/btrfs/sys	btrfs	noauto,defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd			0 2
+UUID=${uuidsys}	/btrfs/save	btrfs	noauto,defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/save	0 2' >> ${file}"
+
+# ext
+[ "${_SSD_EXT}" ] && ssd="ssd," || ssd=
+[ "${_DEVICE_EXT}" ] && sudo sh -c "echo '
+# ext ${_DEVICE_EXT}
+UUID=${uuidext}	/ext	btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd		0 2
+UUID=${uuidext}	/btrfs/ext	btrfs	noauto,defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd		0 2' >> ${file}"
+
+# vms
+[ "${_SSD_VMS}" ] && ssd="ssd," || ssd=
+[ "${_DEVICE_VMS}" ] && sudo sh -c "echo '
+# vms ${_DEVICE_VMS}
+UUID=${uuidvms}	/vms	btrfs	defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd,subvol=/vms			0 2
+UUID=${uuidvms}	/btrfs/vms	btrfs	noauto,defaults,noatime,${ssd}space_cache=v2,autodefrag,compress=zstd		0 2' >> ${file}"
+
+# tmpfs
+if [ "${_MEM}" ]; then
+	_echot "------- fstab tmpfs"
+	if grep -q '^tmp.*/tmp' ${_SYSNAME}/etc/fstab; then
+		sudo sed -i "/tmpfs/ s|mode=1777|mode=1777,size=${_MEM}|" ${file}
+	else
+		sudo sh -c "echo '
+# tmp tmpfs
+tmpfs						/tmp		tmpfs	defaults,noatime,mode=1777,size=${_MEM}							0 0' >> ${file}"
+	fi
+fi
+
+_echot "------- ${file}"
+echo
+cat ${file}
+echo
+_echoA "Check above file: /etc/fstab"
+_askno "Confirm to continue"
+[ "${_ANSWER}" = n ] && _exit
+
+########################  REPO
+
+if ! which git; then
+_echot "------- update"
+_evalr apt update
+_echot "------- git install"
+_install_pcks git
+fi
+
+_echot "------- repo - ${_GIT_BR}"
+pth=${_SYSNAME}/usr/local/install
+[ -d ${pth} ] && _keepmvts ${pth}
+url=https://github.com/aguytech/desktop-${_VER_NAME}
+_evalr git clone -b ${_GIT_BR} ${url} ${pth}
+_evalr chown -R ${uid}:${gid} ${pth}
+
+_echot "------- bs - ${_GIT_BR}"
+pth=${_SYSNAME}/usr/local/bs
+[ -d ${pth} ] && _keepmvts ${pth}
+url=https://github.com/aguytech/bs
+_evalr git clone -b ${_GIT_BR} ${url} ${pth}
+_evalr chown -R ${uid}:${gid} ${pth}
+
+###########  UMOUNT _DEVICE_SYS pth_sys
+
+_echot "------- umount ${pth_sys}"
+cd
+_evalr umount ${pth_sys}
+
+########################  GRUB
+
+###########  chroot enter
+
+_echot "------- grub mount devices"
+cd /
+_evalr mount -o subvol="${_SYSNAME}" "${_DEVICE_SYS}" ${pth_sys} \
+	|| _exite "Unable to mount subvol=${_SYSNAME} of ${_DEVICE_SYS} in ${pth_sys}"
+for i in dev dev/pts sys proc run; do
+	_evalr mount --bind /$i ${pth_sys}/$i
+done
+# uefi
+[ "${_UEFI}" ] && _evalr mount "${_UEFI}" ${pth_sys}/boot/efi
+
+_echot "------- grub install"
+_echoA "After you are 'chrooted' please enter this line :"
+_echo "grub-install --recheck $( [ "${_UEFI}" ] && echo "--efi-directory=/boot/efi" ) ${_DEVICE_GRUB}"
+_echo "update-grub"
+_echo "exit"
+
+_echot "------- grub chroot"
+_evalr chroot ${pth_sys}
+
+_echot "------- grub umount devices"
+# uefi
+[ "$_UEFI" ] && _evalr umount ${pth_sys}/boot/efi
+for i in run proc sys dev/pts dev; do
+	_evalr umount ${pth_sys}/$i
+done
+_evalr umount ${pth_sys}
+
+###########  chroot exit
+
+########################  END
+
+_partadd "${_SPATH}_${_PART}" "${S_FILE_INSTALL_DONE}"
+
+########################  EXPORT
+
+###########  MOUNT _DEVICE_SYS pth_sys
+
+_echot "------- mount ${_DEVICE_SYS} ${pth_sys}"
+_evalr mount "${_DEVICE_SYS}" ${pth_sys} || _exite "Unable to mount ${_DEVICE_SYS} in ${pth_sys}"
+
+_echot "------- copy config"
+pth="${pth_sys}/${_SYSNAME}/${_PATH_CONF}"
+_keepmvts ${pth}
+_evalr cp -a ${_PATH_CONF} ${pth}/
+_evalr chmod 770 ${pth}
+
+_echot "------- copy log"
+pth="${pth_sys}/${_SYSNAME}${_PATH_LOG}"
+_keepmvts ${pth}
+_evalr cp -a ${_PATH_LOG} ${pth}/
+_evalr chown 0:${gid} ${pth}
+_evalr chmod 774 ${pth}
+
+###########  UMOUNT _DEVICE_SYS pth_sys
+
+_echot "------- umount ${pth_sys}"
+_evalr umount ${pth_sys}
+
+_echot "------- reboot ${_DEVICE_SYS}"
+_echoA "You have to restart the global installation script after the reboot"
+_echoa "The computer now will reboot"
+_askno "Validate to continue"
+reboot
+exit
+
+# create an iso file '/vms/iso/desktop-install.iso' with virtual paths: /bs-desktop, /desktop-manjaro and /desktop-ubuntu
+# used for vitualized installation like virt-manager, virtualbox, vmware, ..
+# mkisofs -Jr -o /vms/iso/desktop-install.iso -graft-points /bs=/home/shared/repo/bs /desktop-manjaro=/home/shared/repo/desktop-manjaro /desktop-ubuntu=/home/shared/repo/desktop-ubuntu /desktop-debian=/home/shared/repo/desktop-debian
