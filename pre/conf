@@ -5,7 +5,8 @@
 file_meld_conf=${_PATH_BASE}/conf/soft/meld-perso-dark.style-scheme.xml
 file_aegisub_conf=${_PATH_BASE}/conf/soft/aegisub-config.json
 file_tmux_desktop=${_PATH_BASE}/xtra/xfce4-terminal-tmux.desktop
-_require ${file_meld_conf} ${file_aegisub_conf} ${file_tmux_desktop}
+file_plank_desktop=/usr/share/applications/plank.desktop
+_require ${file_meld_conf} ${file_aegisub_conf} ${file_tmux_desktop} ${file_plank_desktop}
 
 pth_icons=${_PATH_BASE}/icons
 pth_gtk=${_PATH_BASE}/conf/gtk
@@ -66,9 +67,29 @@ _keepmvts ${file}
 _evalr cp ${file_meld_conf} ${pth}
 
 _echot "------- wp"
-pth=/usr/share/backgrounds
-_evalr cp ${pth_wp}/* ${pth}/
-_evalr chmod 644 ${pth}/*
+for pth in /usr/share/xfce4/backdrops /usr/share/backgrounds/xfce; do
+	_evalr cp ${pth_wp}/* ${pth}/
+	_evalr chmod 644 ${pth}/*
+done
+
+_echot "------- numlockx in tty"
+file=/etc/lightdm/lightdm-gtk-greeter.conf
+# ally-states
+if grep -q "^a11y-states *=" ${file}; then
+	sudo sed -i "s|\(^a11y-states.*\)$|\1;+keyboard|" ${file}
+else
+	sudo sh -c "echo 'a11y-states = +keyboard' >> ${file}"
+fi
+
+_echot "------- numlockx in ldm"
+file=/etc/lightdm/lightdm-gtk-greeter.conf
+cmd="/usr/bin/numlockx on"
+# keyboard
+if grep -q "^keyboard *=" ${file}; then
+	sudo sed -i "s|\(^keyboard *=\)|\1 ${cmd}|" ${file}
+else
+	sudo sh -c "echo 'keyboard = ${cmd}' >> ${file}"
+fi
 
 ########################  USER
 
@@ -132,6 +153,14 @@ pth=${HOME}/.aegisub/
 [ -d "${pth}" ] || _eval mkdir -p ${pth}
 _eval cp -a ${file_aegisub_conf} ${pth}
 _evalr chmod 644 ${pth}/${file_aegisub_conf##*/}
+
+_echot "------- plank"
+pth=${HOME}/.config/autostart
+[ -d "${pth}" ] || _eval mkdir -p ${pth}
+_eval cp ${file_plank_desktop} ${pth}/
+_echoA "After validation, adjust plank preferences and close plank window"
+_askno "Validate to continue"
+plank --preferences &
 
 ########################  EXTERNAL
 
