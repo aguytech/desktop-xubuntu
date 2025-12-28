@@ -1,5 +1,9 @@
 #!/bin/bash
 
+_echot "------- apt repository"
+sudo apt-add-repository -yn ppa:freecad-maintainers/freecad-stable # freecad
+_evalr apt update
+
 _echot "------- install"
 packages="freecad"
 _install_pcks ${packages}
