@@ -36,7 +36,7 @@ _install_pcks ${packages}
 _echot "------- media-extras"
 packages="gstreamer1.0-plugins-good gstreamer1.0-plugins-bad"
 packages+=" libavcodec-extra"
-_install_pcks ${packaegs}
+_install_pcks ${packages}
 
 _echot "------- audio"
 packages="audacity easytag sayonara soundconverter sound-juicer"
