@@ -13,7 +13,7 @@ packages="geany git gitg gitk gtkhash vim"
 _install_pcks ${packages}
 
 _echot "------- extra"
-packages=" openjdk-21-jre"
+packages=" openjdk-26-jre"
 # sysstat
 _install_pcks ${packages}
 
