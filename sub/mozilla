@@ -28,3 +28,9 @@ _echot "------- firefox profile"
 _echoA "Choose the right path to create a profile & close application"
 _askno "Validate to continue"
 firefox --ProfileManager
+
+_echot "------- firefox launcher"
+name=firefox
+file=/usr/share/applications/${name}.desktop
+pth=~/.local/share/applications
+[ -f ${file} ] && _eval cp --update=all ${file} ${pth}
