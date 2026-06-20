@@ -29,6 +29,9 @@ _echot "------- needed packages"
 packages="git fonts-font-awesome"
 _install_pcks ${packages}
 
+_echot "------- update font cache"
+_evalr fc-cache -fv
+
 _echot "------- oh-my-zsh"
 _echo "Launch this following command in an other terminal:"
 _echoA 'sh -c "$(wget https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh -qO -)"'
