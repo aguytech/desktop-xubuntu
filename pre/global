@@ -17,7 +17,7 @@ packages+=" p7zip-full pigz zstd"
 _install_pcks ${packages}
 
 _echot "------- tools"
-packages="dconf-editor dconf-cli font-manager meld plank qt6ct stopwatch"
+packages="dconf-editor dconf-cli engrampa font-manager meld plank qt6ct stopwatch"
 packages+=" gnome-activity-journal gnome-system-monitor"
 # qt5ct boot-repair backintime-gnome y-ppa-manager numlockx multisystem baobab gnome-system-tools gnome-tweaks gnome-sushi"
 _install_pcks ${packages}
